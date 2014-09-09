@@ -1,6 +1,6 @@
 // Function approximation with 1 hidden layer.
-// Function variables are lowerBound, upperBound, and examples are read in from the Functions holder.
-// The number of units is given by numUnits.
+// Console arguments are lowerBound, upperBound, numUnits; examples are read in from the Functions holder.
+// Removed training, gradient descent, random initialization, and regularization inherited from the original neural network.
 
 import org.apache.commons.math3.linear.*;
 import org.apache.commons.math3.analysis.function.Sigmoid;
@@ -12,64 +12,73 @@ public class FunctionApproximation {
 	static List<ExampleFunctionResult> trainingExamples;
 	static List<ExampleFunctionResult> testExamples;
 	
-	static int numUnits = 16; // the number of rectangles will be numUnits/2
+	static int numUnits; // the number of rectangles will be numUnits/2
 	
 	static BlockRealMatrix theta1;
 	static BlockRealMatrix theta2;
 	static BlockRealMatrix pDerivative1;
 	static BlockRealMatrix pDerivative2;
 	static BlockRealMatrix act2;
-	static BlockRealMatrix bias1 = new BlockRealMatrix(numUnits,1);
+	static BlockRealMatrix biasVector;
 	
 	static BlockRealMatrix hypothesis = new BlockRealMatrix(1,1); // layer 4, final vector result
 	static BlockRealMatrix testHypothesis = new BlockRealMatrix(1,1); // the test hypothesis when calculating the cost
 	
-	static double learningRate; // rate multiplied by the partial derivative. Greater values mean faster convergence but possible divergence, default .01.
-	static double regularizationRate; // regularization rate, default .01.
-	static int numExamples = 0; // number of examples
-	static double lowerBound = 0;
-	static double upperBound = 80;
+	static int numExamples = 0; // number of examples, updated within the methods
+	static double lowerBound;
+	static double upperBound;
 	
+	static Function f = new ExponentialFunction();
 	public static void main( String[] args ) throws Exception {
+		initialize(Double.parseDouble(args[0]),Double.parseDouble(args[1]),Integer.parseInt(args[2]));
+		
+		System.out.println( "The calculated cost on the training set is: " + calculateCost() );
+		
+		run();
+	}
+	
+	// Initialize all of the fields.
+	public static void initialize(double lower, double upper, int units) {
 		trainingExamples = readExamples("C:/Users/James/Programming/Functions/trainingexamples/", "training");
 		testExamples = readExamples("C:/Users/James/Programming/Functions/testexamples/", "test");
-
+	
+		lowerBound = lower;
+		upperBound = upper;
+		numUnits = units;
+		
+		biasVector = new BlockRealMatrix(numUnits,1);
+		
 		theta1 = new BlockRealMatrix(numUnits,1).scalarAdd(1000d);
 		updateBias();
 		System.out.println( "Initialized first parameter vector." );
 		theta2 = new BlockRealMatrix(1,numUnits);
-		manualUpdate();
+		manualUpdate( f ); // set the function that implements the Function interface
 		System.out.println( "Initialized second parameter vector." );
-		System.out.println("---------------------");
-		
-		learningRate = Double.parseDouble(args[1]); 
-		//regularizationRate = Double.parseDouble(args[2]);
-		
-		//train(Integer.parseInt(args[0]));
-		
-		hypothesis = forwardPropagation( testExamples.get(0));
-		System.out.println("---------------------");
-		printHypothesis(hypothesis);
+		System.out.println("--------------------------------------------------------------");
 	}
 	
-	// Manually set the outer weights (h), essentially defines the function to approximate.
-	// Can set so that given a set of function outputs, adjust the number of units and weights to create an approximation.
-	public static void manualUpdate() {
-		double[] inputs = {0d,10d,20d,30d,40d,50d,60d,70d,80d};
-		for( int i = 0; i < theta2.getRowVector(0).getDimension(); i++ ) {
-			if( (i+1) % 2 != 0 )
-				theta2.setEntry(0,i,inputs[i/2]);
-			else
-				theta2.setEntry(0,i,-theta2.getEntry(0,i-1));
+	// Runs the finalized hypothesis on all of the test examples.
+	public static void run() { 
+		for( ExampleFunctionResult efr : testExamples ) {
+			hypothesis = forwardPropagation(efr);
+			System.out.println("--------------------------------------------------------------");
+			System.out.println("The input to the approximation was: " + efr.x.getEntry(0));
+			printHypothesis(hypothesis);
+			System.out.println("This has an actual error of: " + (hypothesis.getEntry(0,0) - f.getOutput(efr.x.getEntry(0))));
 		}
 	}
 	
-	// Runs gradient descent until the cost is less than some epsilon.
-	public static void train(double epsilon) {
-		int iteration = 1;
-		while( calculateCost() > epsilon ) {
-			gradientDescent(1);
-			System.out.println( "Cost of iteration " + iteration++ + " is: " + calculateCost());
+	// Manually set the outer weights (h) by taking a Function object and calling it per step.
+	public static void manualUpdate(Function f) {
+		double multiple = 1;
+		for( int i = 0; i < numUnits; i++ ) {
+			if( (i+1) % 2 != 0 ) {
+				double stepIncrement = (upperBound - lowerBound)/(numUnits/2);
+				double argument = stepIncrement * multiple++;
+				double result = f.getOutput(argument);
+				theta2.setEntry(0,i,result);
+			} else
+				theta2.setEntry(0,i,-theta2.getEntry(0,i-1));
 		}
 	}
 	
@@ -87,21 +96,11 @@ public class FunctionApproximation {
 		cost = ((double)(1)/(double) (numExamples)) * cost;
 		return cost;
 	}
-	
-	// Runs numIterations iterations of batch gradient descent using the class' partial derivative terms calculated from backprop and the learning rate.
-	public static void gradientDescent( int numIterations ) {
-		for( int i = 0; i < numIterations; i++ ) {
-			for( ExampleFunctionResult ex : trainingExamples ) 
-				hypothesis = forwardPropagation( ex );
-			backPropagation( trainingExamples ); // updates partial derivatives
-			theta2 = theta2.subtract( pDerivative2.scalarMultiply(learningRate) );
-		}
-	}
-	
+		
 	// Runs forward propagation, given this particular neural network.
 	// Can readjust to take arguments of number of units and layers.
 	public static BlockRealMatrix forwardPropagation(ExampleFunctionResult ex) {
-		BlockRealMatrix z2 = theta1.multiply(convertMatrix(ex.x)).add(bias1);
+		BlockRealMatrix z2 = theta1.multiply(convertMatrix(ex.x)).add(biasVector);
 		act2 = convertMatrix(sigmoid(new ArrayRealVector(z2.getColumnVector(0))));
 		convertStepFunction();
 		BlockRealMatrix z3 = theta2.multiply(act2);
@@ -154,14 +153,22 @@ public class FunctionApproximation {
 	
 	// Initialize the first weight according to the steps; in particular, we adjust the bias which is dependent on the weight such that b = -ws.
 	public static void updateBias() {
-		double stepIncrement = (upperBound - lowerBound)/numUnits;
-		int index = 0;
-		for( double i = 0; i < (upperBound-lowerBound); i += stepIncrement ) {
-			double bias = (-theta1.getEntry(index,0)) * i;
-			bias1.setEntry(index,0,bias);
-			if( index < numUnits-1)
-				index++;
-			System.out.println(i);
+		double stepIncrement = (upperBound - lowerBound)/(numUnits/2);
+		double bias;
+		boolean flag = false;
+		int index = 1;
+		for( int i = 0; i < numUnits; i++ ) {
+			if(flag && i != 0) {
+				bias = (-theta1.getEntry(i,0)) * (index++) * stepIncrement;
+				flag = false;
+			}
+			else if(!flag && i != 0) {
+				bias = (-theta1.getEntry(i,0)) * index * stepIncrement;
+				flag = true;
+			} else
+				bias = 0;
+				
+			biasVector.setEntry(i,0,bias);
 		}
 	}
 	
@@ -174,20 +181,7 @@ public class FunctionApproximation {
 				act2.setEntry(i,0,0);
 		}
 	}
-	
-	// Randomly initialize each of the theta values by [negEpsilon, epsilon] or [-epsilon, epsilon].
-	// Can rework the method to initialize more optimally, current naive implementation in quadratic time.
-	public static BlockRealMatrix randInitialize( double epsilon, int row, int col ) {
-		BlockRealMatrix mat = new BlockRealMatrix(row,col);
-		Random r = new Random();
-		for( int i = 0; i < row; i++ )
-			for( int j = 0; j < col; j++ ) {
-				double rand = r.nextDouble() * (2*epsilon) - epsilon;
-				mat.addToEntry(i,j,rand);
-			}
-		return mat;
-	}
-		
+			
 	// Read in the examples' input and output by reading their RGB values and the name (per format), stored in a List.
 	public static List<ExampleFunctionResult> readExamples(String path, String set ) {
 		int loadedExamples = 0;
@@ -253,43 +247,5 @@ public class FunctionApproximation {
 			return new ArrayRealVector(mat.getColumnVector(0));
 		else
 			return new ArrayRealVector(mat.getRowVector(0));
-	}
-		
-	// Auxiliary method to check the dimensions of the input matrix.
-	public static void printDimensions( BlockRealMatrix mat ) {
-		System.out.println( "Number of rows: " + mat.getColumnVector(0).getDimension() );
-		System.out.println( "Number of columns: " + mat.getRowVector(0).getDimension() );		
-	}
-	
-	// Auxiliary method to better examine the matrix's values.
-	public static void printMatrixToFile( BlockRealMatrix mat ) throws Exception {
-		PrintWriter writer = new PrintWriter("matrixdump.txt", "UTF-8");
-		double[][] matArray = mat.getData();
-		for( int i = 0; i < matArray.length; i++ ) {
-			for( int j = 0; j < matArray[i].length; j++ ) {
-				writer.print( matArray[i][j] + " " );
-			}
-			writer.println();
-		}
-	}
-	
-	// Auxiliary method to check proper vector accesses.
-	// Prints the matrix by creating an 2d double array primitive to loop over, works for non n x n matrices.
-	public static void printMatrix( BlockRealMatrix brm ) {
-		double[][] mat = brm.getData();
-		for( int i = 0; i < mat.length; i++ ) {
-			for( int j = 0; j < mat[i].length; j++ ) {
-				System.out.print( mat[i][j] + " " );
-			}
-			System.out.println();
-		}
-	}
-	
-	// Auxiliary method to print the vector.
-	public static void printVector( ArrayRealVector vec ) {
-		double[] array = vec.toArray();
-		for( int i = 0; i < array.length; i++ ) {
-			System.out.println( array[i] );
-		}
 	}
 }
