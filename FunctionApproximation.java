@@ -101,16 +101,22 @@ public class FunctionApproximation {
 	// Can readjust to take arguments of number of units and layers.
 	public static BlockRealMatrix forwardPropagation(ExampleFunctionResult ex) {
 		BlockRealMatrix z2 = theta1.multiply(convertMatrix(ex.x)).add(biasVector);
-		act2 = convertMatrix(sigmoid(new ArrayRealVector(z2.getColumnVector(0))));
-		convertStepFunction();
+		act2 = convertMatrix(step(new ArrayRealVector(z2.getColumnVector(0))));
 		BlockRealMatrix z3 = theta2.multiply(act2);
 		// no bias for the output unit
 		return convertMatrix(new ArrayRealVector(z3.getColumnVector(0)));
 	}
 	
-	// Sigmoid function that takes an ArrayRealVector.
-	public static ArrayRealVector sigmoid( ArrayRealVector arg ) {
-		return arg.mapToSelf( new Sigmoid(1e-323,1-(1e-323)) );
+	// Step function adapted from the sigmoid function that takes an ArrayRealVector.
+	public static ArrayRealVector step( ArrayRealVector arg ) {
+		arg.mapToSelf( new Sigmoid(1e-323,1-(1e-323)) );
+		for( int i = 0; i < arg.getDimension(); i++ ) {
+			if( arg.getEntry(i) > 0.5 )
+				arg.setEntry(i,1);
+			else
+				arg.setEntry(i,0);
+		}
+		return arg;
 	}
 	
 	// Updates the outer weights (in this case theta2) so that each pair of activation units have outgoing weights +h and -h respectively.
@@ -143,16 +149,6 @@ public class FunctionApproximation {
 				bias = 0;
 				
 			biasVector.setEntry(i,0,bias);
-		}
-	}
-	
-	// Simplify the activation unit values to better mimic the step function.
-	public static void convertStepFunction() {
-		for( int i = 0; i < act2.getColumnVector(0).getDimension(); i++ ) {
-			if( act2.getEntry(i,0) > 0.5 )
-				act2.setEntry(i,0,1);
-			else
-				act2.setEntry(i,0,0);
 		}
 	}
 			
