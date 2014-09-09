@@ -37,12 +37,10 @@ public class FunctionApproximation {
 		theta1 = new BlockRealMatrix(numUnits,1).scalarAdd(1000d);
 		updateBias();
 		System.out.println( "Initialized first parameter vector." );
-		theta2 = randInitialize( 1, 1, numUnits );
-		updateOuterWeights();
-		System.out.println( "Randomly initialized second parameter vector." );
-		System.out.println("---------------------");
-		
+		theta2 = new BlockRealMatrix(1,numUnits);
 		manualUpdate();
+		System.out.println( "Initialized second parameter vector." );
+		System.out.println("---------------------");
 		
 		learningRate = Double.parseDouble(args[1]); 
 		//regularizationRate = Double.parseDouble(args[2]);
@@ -55,8 +53,9 @@ public class FunctionApproximation {
 	}
 	
 	// Manually set the outer weights (h), essentially defines the function to approximate.
+	// Can set so that given a set of function outputs, adjust the number of units and weights to create an approximation.
 	public static void manualUpdate() {
-		double[] inputs = {0d,10d,20d,30d,40d,50d,60d,70d};
+		double[] inputs = {0d,10d,20d,30d,40d,50d,60d,70d,80d};
 		for( int i = 0; i < theta2.getRowVector(0).getDimension(); i++ ) {
 			if( (i+1) % 2 != 0 )
 				theta2.setEntry(0,i,inputs[i/2]);
@@ -104,6 +103,7 @@ public class FunctionApproximation {
 	public static BlockRealMatrix forwardPropagation(ExampleFunctionResult ex) {
 		BlockRealMatrix z2 = theta1.multiply(convertMatrix(ex.x)).add(bias1);
 		act2 = convertMatrix(sigmoid(new ArrayRealVector(z2.getColumnVector(0))));
+		convertStepFunction();
 		BlockRealMatrix z3 = theta2.multiply(act2);
 		// no bias for the output unit
 		return convertMatrix(new ArrayRealVector(z3.getColumnVector(0)));
@@ -156,10 +156,22 @@ public class FunctionApproximation {
 	public static void updateBias() {
 		double stepIncrement = (upperBound - lowerBound)/numUnits;
 		int index = 0;
-		for( double i = 0; i < upperBound; i += stepIncrement ) {
+		for( double i = 0; i < (upperBound-lowerBound); i += stepIncrement ) {
 			double bias = (-theta1.getEntry(index,0)) * i;
 			bias1.setEntry(index,0,bias);
-			index++;
+			if( index < numUnits-1)
+				index++;
+			System.out.println(i);
+		}
+	}
+	
+	// Simplify the activation unit values to better mimic the step function.
+	public static void convertStepFunction() {
+		for( int i = 0; i < act2.getColumnVector(0).getDimension(); i++ ) {
+			if( act2.getEntry(i,0) > 0.5 )
+				act2.setEntry(i,0,1);
+			else
+				act2.setEntry(i,0,0);
 		}
 	}
 	
