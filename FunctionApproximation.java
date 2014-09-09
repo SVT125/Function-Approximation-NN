@@ -108,32 +108,6 @@ public class FunctionApproximation {
 		return convertMatrix(new ArrayRealVector(z3.getColumnVector(0)));
 	}
 	
-	// Runs back propagation, updates the partial derivative values for one call.
-	public static void backPropagation(List<ExampleFunctionResult> examples) {
-		BlockRealMatrix delta1 = new BlockRealMatrix(numUnits,1);
-		BlockRealMatrix delta2 = new BlockRealMatrix(1,numUnits);
-		
-		for( ExampleFunctionResult ex : examples ) {
-			forwardPropagation(ex);
-		
-			BlockRealMatrix error3 = convertMatrix(convertVector(hypothesis).subtract(ex.y));
-	
-			ArrayRealVector derivative2 = convertVector(act2).ebeMultiply(convertVector(new BlockRealMatrix(act2.scalarMultiply(-1d).scalarAdd(1d).getData())));
-			BlockRealMatrix error2 = convertMatrix(convertVector(theta2.transpose().multiply(error3))
-				.ebeMultiply(derivative2));
-				
-			delta2 = delta2.add(error3.multiply(act2.transpose()));
-		}
-		double scalarDelta = 1/(double)numExamples;
-		
-		pDerivative2 = new BlockRealMatrix(delta2.scalarMultiply(scalarDelta).getData());
-		
-		/* Regularize the partial derivatives
-		RealVector thetaRow1 = theta1.getColumnVector(0), thetaRow2 = theta2.getColumnVector(0);
-		pDerivative2.setColumnVector(0,new ArrayRealVector(pDerivative2.getColumnVector(0)).add(thetaRow2));
-		*/
-	}
-	
 	// Sigmoid function that takes an ArrayRealVector.
 	public static ArrayRealVector sigmoid( ArrayRealVector arg ) {
 		return arg.mapToSelf( new Sigmoid(1e-323,1-(1e-323)) );
